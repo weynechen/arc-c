@@ -131,18 +131,9 @@ static arc_err_t openai_chat(
     /* Model */
     cJSON_AddStringToObject(root, "model", params->model);
 
-    /* Messages array */
+    /* Messages array - system messages from history are included directly */
     cJSON* msgs_arr = cJSON_AddArrayToObject(root, "messages");
 
-    /* Add system message if instructions provided */
-    if (params->instructions) {
-        cJSON* sys_msg = cJSON_CreateObject();
-        cJSON_AddStringToObject(sys_msg, "role", "system");
-        cJSON_AddStringToObject(sys_msg, "content", params->instructions);
-        cJSON_AddItemToArray(msgs_arr, sys_msg);
-    }
-
-    /* Add user messages */
     for (const ac_message_t* msg = messages; msg; msg = msg->next) {
         cJSON* msg_obj = ac_message_to_json(msg);
         if (msg_obj) {
@@ -715,18 +706,9 @@ static arc_err_t openai_chat_stream(
     cJSON_AddBoolToObject(stream_opts, "include_usage", 1);
     cJSON_AddItemToObject(root, "stream_options", stream_opts);
 
-    /* Messages array */
+    /* Messages array - system messages from history are included directly */
     cJSON* msgs_arr = cJSON_AddArrayToObject(root, "messages");
 
-    /* Add system message if instructions provided */
-    if (params->instructions) {
-        cJSON* sys_msg = cJSON_CreateObject();
-        cJSON_AddStringToObject(sys_msg, "role", "system");
-        cJSON_AddStringToObject(sys_msg, "content", params->instructions);
-        cJSON_AddItemToArray(msgs_arr, sys_msg);
-    }
-
-    /* Add user messages */
     for (const ac_message_t* msg = messages; msg; msg = msg->next) {
         cJSON* msg_obj = ac_message_to_json(msg);
         if (msg_obj) {

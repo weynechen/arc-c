@@ -206,9 +206,12 @@ static arc_err_t anthropic_chat(
     cJSON_AddStringToObject(root, "model", params->model);
     cJSON_AddNumberToObject(root, "max_tokens", params->max_tokens > 0 ? params->max_tokens : 4096);
 
-    /* Anthropic uses separate system field, not in messages */
-    if (params->instructions) {
-        cJSON_AddStringToObject(root, "system", params->instructions);
+    /* Anthropic uses separate system field - extract from message history */
+    for (const ac_message_t* msg = messages; msg; msg = msg->next) {
+        if (msg->role == AC_ROLE_SYSTEM && msg->content) {
+            cJSON_AddStringToObject(root, "system", msg->content);
+            break;  /* Use first system message only */
+        }
     }
 
     /* Thinking configuration */
@@ -223,11 +226,11 @@ static arc_err_t anthropic_chat(
         cJSON_AddItemToObject(root, "thinking", thinking);
     }
 
-    /* Messages array (skip system messages) */
+    /* Messages array (skip system messages - they go in system field) */
     cJSON* msgs_arr = cJSON_AddArrayToObject(root, "messages");
 
     for (const ac_message_t* msg = messages; msg; msg = msg->next) {
-        /* Skip system messages (handled separately) */
+        /* Skip system messages (handled in system field above) */
         if (msg->role == AC_ROLE_SYSTEM) {
             continue;
         }
@@ -687,8 +690,12 @@ static arc_err_t anthropic_chat_stream(
     cJSON_AddNumberToObject(root, "max_tokens", params->max_tokens > 0 ? params->max_tokens : 4096);
     cJSON_AddBoolToObject(root, "stream", 1);  /* Enable streaming */
 
-    if (params->instructions) {
-        cJSON_AddStringToObject(root, "system", params->instructions);
+    /* Anthropic uses separate system field - extract from message history */
+    for (const ac_message_t* msg = messages; msg; msg = msg->next) {
+        if (msg->role == AC_ROLE_SYSTEM && msg->content) {
+            cJSON_AddStringToObject(root, "system", msg->content);
+            break;  /* Use first system message only */
+        }
     }
 
     /* Thinking configuration */
@@ -703,7 +710,7 @@ static arc_err_t anthropic_chat_stream(
         cJSON_AddItemToObject(root, "thinking", thinking);
     }
 
-    /* Messages array */
+    /* Messages array (skip system messages - they go in system field) */
     cJSON* msgs_arr = cJSON_AddArrayToObject(root, "messages");
     for (const ac_message_t* msg = messages; msg; msg = msg->next) {
         if (msg->role == AC_ROLE_SYSTEM) continue;

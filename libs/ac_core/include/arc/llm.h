@@ -125,6 +125,13 @@ typedef struct {
  * LLM Parameters
  *============================================================================*/
 
+/**
+ * @brief LLM configuration parameters
+ *
+ * Note: System instructions should be included in the message history as
+ * AC_ROLE_SYSTEM message, not configured here. The LLM layer is a passthrough
+ * that handles API communication, while the Agent layer manages instructions.
+ */
 typedef struct {
     /*========== Provider Selection ==========*/
     const char* provider;           /**< Provider name: "openai", "anthropic", etc. */
@@ -134,7 +141,7 @@ typedef struct {
     const char* model;              /**< Model name (required) */
     const char* api_key;            /**< API key (required) */
     const char* api_base;           /**< API base URL (optional) */
-    const char* instructions;       /**< System instructions (optional) */
+    // const char* instructions;       /**< System instructions (optional) */
 
     /*========== Generation Parameters ==========*/
     float temperature;              /**< Sampling temperature (0.0-2.0, default: 0.7) */
