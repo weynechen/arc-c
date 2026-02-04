@@ -3,6 +3,11 @@
  * @brief Anthropic Claude API provider
  *
  * Supports Claude models via Anthropic's API.
+ * Features:
+ * - Extended thinking (thinking blocks with signature)
+ * - Tool calling
+ * - Content block parsing
+ *
  * API documentation: https://docs.anthropic.com/
  */
 
@@ -17,6 +22,7 @@
 #include <stdio.h>
 
 #define ANTHROPIC_API_VERSION "2023-06-01"
+#define ANTHROPIC_THINKING_MIN_BUDGET 1024
 
 /*============================================================================
  * HTTP Pool Integration (weak symbols for optional linking)
@@ -92,8 +98,6 @@ static arc_err_t anthropic_chat(
         return ARC_ERR_INVALID_ARG;
     }
 
-    (void)tools;  /* TODO: Implement Anthropic tool calling */
-
     anthropic_priv_t* priv = (anthropic_priv_t*)priv_data;
     arc_http_client_t* http = NULL;
     int from_pool = 0;
@@ -121,6 +125,7 @@ static arc_err_t anthropic_chat(
     /* Build request JSON */
     cJSON* root = cJSON_CreateObject();
     if (!root) {
+        if (from_pool) ac_http_pool_release(http);
         return ARC_ERR_NO_MEMORY;
     }
 
@@ -132,6 +137,18 @@ static arc_err_t anthropic_chat(
         cJSON_AddStringToObject(root, "system", params->instructions);
     }
 
+    /* Thinking configuration */
+    if (params->thinking.enabled) {
+        cJSON* thinking = cJSON_CreateObject();
+        cJSON_AddStringToObject(thinking, "type", "enabled");
+        int budget = params->thinking.budget_tokens;
+        if (budget < ANTHROPIC_THINKING_MIN_BUDGET) {
+            budget = ANTHROPIC_THINKING_MIN_BUDGET;
+        }
+        cJSON_AddNumberToObject(thinking, "budget_tokens", budget);
+        cJSON_AddItemToObject(root, "thinking", thinking);
+    }
+
     /* Messages array (skip system messages) */
     cJSON* msgs_arr = cJSON_AddArrayToObject(root, "messages");
 
@@ -141,12 +158,19 @@ static arc_err_t anthropic_chat(
             continue;
         }
 
-        cJSON* msg_obj = cJSON_CreateObject();
-        cJSON_AddStringToObject(msg_obj, "role", ac_role_to_string(msg->role));
-        if (msg->content) {
-            cJSON_AddStringToObject(msg_obj, "content", msg->content);
+        /* Use Anthropic-specific format for messages with content blocks */
+        cJSON* msg_obj = ac_message_to_json_anthropic(msg);
+        if (msg_obj) {
+            cJSON_AddItemToArray(msgs_arr, msg_obj);
         }
-        cJSON_AddItemToArray(msgs_arr, msg_obj);
+    }
+
+    /* Tools */
+    if (tools && strlen(tools) > 0) {
+        cJSON* tools_arr = cJSON_Parse(tools);
+        if (tools_arr) {
+            cJSON_AddItemToObject(root, "tools", tools_arr);
+        }
     }
 
     char* body = cJSON_PrintUnformatted(root);
@@ -201,65 +225,24 @@ static arc_err_t anthropic_chat(
         return ARC_ERR_HTTP;
     }
 
-    /* Parse response JSON */
+    /* Parse response using Anthropic-specific parser */
     AC_LOG_DEBUG("Anthropic response: %s", http_resp.body);
 
-    cJSON* resp_root = cJSON_Parse(http_resp.body);
-    if (!resp_root) {
-        AC_LOG_ERROR("Failed to parse Anthropic response JSON");
-        arc_http_response_free(&http_resp);
-        if (from_pool) ac_http_pool_release(http);
-        return ARC_ERR_HTTP;
-    }
+    err = ac_chat_response_parse_anthropic(http_resp.body, response);
 
-    /* Initialize response */
-    ac_chat_response_init(response);
-
-    /* Extract content from content[0].text */
-    cJSON* content_arr = cJSON_GetObjectItem(resp_root, "content");
-    if (!content_arr || !cJSON_IsArray(content_arr) || cJSON_GetArraySize(content_arr) == 0) {
-        AC_LOG_ERROR("No content in Anthropic response");
-        cJSON_Delete(resp_root);
-        arc_http_response_free(&http_resp);
-        if (from_pool) ac_http_pool_release(http);
-        return ARC_ERR_HTTP;
-    }
-
-    cJSON* content_item = cJSON_GetArrayItem(content_arr, 0);
-    cJSON* text = cJSON_GetObjectItem(content_item, "text");
-
-    if (text && cJSON_IsString(text)) {
-        response->content = ARC_STRDUP(cJSON_GetStringValue(text));
-    }
-
-    /* Extract stop reason */
-    cJSON* stop_reason = cJSON_GetObjectItem(resp_root, "stop_reason");
-    if (stop_reason && cJSON_IsString(stop_reason)) {
-        response->finish_reason = ARC_STRDUP(cJSON_GetStringValue(stop_reason));
-    }
-
-    /* Extract usage */
-    cJSON* usage = cJSON_GetObjectItem(resp_root, "usage");
-    if (usage) {
-        cJSON* input_tokens = cJSON_GetObjectItem(usage, "input_tokens");
-        cJSON* output_tokens = cJSON_GetObjectItem(usage, "output_tokens");
-
-        if (input_tokens && cJSON_IsNumber(input_tokens)) {
-            response->prompt_tokens = input_tokens->valueint;
-        }
-        if (output_tokens && cJSON_IsNumber(output_tokens)) {
-            response->completion_tokens = output_tokens->valueint;
-        }
-        response->total_tokens = response->prompt_tokens + response->completion_tokens;
-    }
-
-    cJSON_Delete(resp_root);
     arc_http_response_free(&http_resp);
 
     /* Release HTTP client back to pool */
     if (from_pool) ac_http_pool_release(http);
 
-    AC_LOG_DEBUG("Anthropic chat completed");
+    if (err != ARC_OK) {
+        AC_LOG_ERROR("Failed to parse Anthropic response");
+        return err;
+    }
+
+    AC_LOG_DEBUG("Anthropic chat completed: blocks=%d, content=%s",
+                 response->block_count,
+                 response->content ? "yes" : "no");
     return ARC_OK;
 }
 
@@ -286,8 +269,10 @@ static void anthropic_cleanup(void* priv_data) {
 
 const ac_llm_ops_t anthropic_ops = {
     .name = "anthropic",
+    .capabilities = AC_LLM_CAP_THINKING | AC_LLM_CAP_TOOLS | AC_LLM_CAP_STREAMING,
     .create = anthropic_create,
     .chat = anthropic_chat,
+    .chat_stream = NULL,  /* TODO: Implement streaming */
     .cleanup = anthropic_cleanup,
 };
 

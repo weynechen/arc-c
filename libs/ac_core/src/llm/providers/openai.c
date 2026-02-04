@@ -268,8 +268,10 @@ static void openai_cleanup(void* priv_data) {
  */
 const ac_llm_ops_t openai_ops = {
     .name = "openai",
+    .capabilities = AC_LLM_CAP_TOOLS | AC_LLM_CAP_STREAMING,
     .create = openai_create,
     .chat = openai_chat,
+    .chat_stream = NULL,  /* TODO: Implement streaming */
     .cleanup = openai_cleanup,
 };
 

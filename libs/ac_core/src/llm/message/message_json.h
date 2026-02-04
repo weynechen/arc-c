@@ -92,6 +92,51 @@ char* ac_tool_calls_to_json_string(const ac_tool_call_t* calls);
  */
 arc_err_t ac_chat_response_parse(const char* json_str, ac_chat_response_t* response);
 
+/**
+ * @brief Parse Anthropic API response JSON into ac_chat_response_t
+ *
+ * Handles Anthropic Messages API response format with content blocks:
+ * {
+ *   "id": "msg_...",
+ *   "content": [
+ *     { "type": "thinking", "thinking": "...", "signature": "..." },
+ *     { "type": "text", "text": "..." },
+ *     { "type": "tool_use", "id": "...", "name": "...", "input": {...} }
+ *   ],
+ *   "stop_reason": "end_turn" | "tool_use" | ...,
+ *   "usage": { "input_tokens": N, "output_tokens": N }
+ * }
+ *
+ * @param json_str Raw JSON response string
+ * @param response Output structure (caller must init and free)
+ * @return ARC_OK on success
+ */
+arc_err_t ac_chat_response_parse_anthropic(const char* json_str, ac_chat_response_t* response);
+
+/*============================================================================
+ * Content Block to JSON (for Anthropic format)
+ *============================================================================*/
+
+/**
+ * @brief Convert content block to JSON object (Anthropic format)
+ *
+ * @param block Content block
+ * @return cJSON object (caller owns), NULL on error
+ */
+cJSON* ac_content_block_to_json(const ac_content_block_t* block);
+
+/**
+ * @brief Convert message to JSON object (Anthropic format)
+ *
+ * Creates a JSON object suitable for Anthropic API with content array:
+ * - role: "user" | "assistant"
+ * - content: array of content blocks
+ *
+ * @param msg Message to convert
+ * @return cJSON object (caller owns), NULL on error
+ */
+cJSON* ac_message_to_json_anthropic(const ac_message_t* msg);
+
 #ifdef __cplusplus
 }
 #endif

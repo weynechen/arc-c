@@ -50,6 +50,19 @@ ac_llm_t* ac_llm_create(arena_t* arena, const ac_llm_params_t* params) {
     llm->params.top_p = params->top_p;
     llm->params.max_tokens = params->max_tokens;
     llm->params.timeout_ms = params->timeout_ms;
+    
+    // Copy thinking config (v2)
+    llm->params.thinking.enabled = params->thinking.enabled;
+    llm->params.thinking.budget_tokens = params->thinking.budget_tokens;
+    
+    // Copy stateful config (v2)
+    llm->params.stateful.store = params->stateful.store;
+    llm->params.stateful.response_id = params->stateful.response_id ? 
+        arena_strdup(arena, params->stateful.response_id) : NULL;
+    llm->params.stateful.include_encrypted = params->stateful.include_encrypted;
+    
+    // Copy stream flag (v2)
+    llm->params.stream = params->stream;
 
     if (!llm->params.model || !llm->params.api_key) {
         AC_LOG_ERROR("Failed to copy strings to arena");
@@ -151,4 +164,90 @@ char* ac_llm_chat(ac_llm_t* llm, const ac_message_t* messages) {
     ac_chat_response_free(&response);
 
     return result;
+}
+
+/*============================================================================
+ * Streaming API (v2)
+ *============================================================================*/
+
+arc_err_t ac_llm_chat_stream(
+    ac_llm_t* llm,
+    const ac_message_t* messages,
+    const char* tools,
+    ac_stream_callback_t callback,
+    void* user_data,
+    ac_chat_response_t* response
+) {
+    if (!llm || !llm->provider || !callback) {
+        AC_LOG_ERROR("Invalid arguments to ac_llm_chat_stream");
+        return ARC_ERR_INVALID_ARG;
+    }
+
+    // Check if provider supports streaming
+    if (!llm->provider->chat_stream) {
+        AC_LOG_ERROR("Provider %s does not support streaming", llm->provider->name);
+        return ARC_ERR_NOT_IMPLEMENTED;
+    }
+
+    // Initialize response if provided
+    if (response) {
+        ac_chat_response_init(response);
+    }
+
+    arc_err_t err = llm->provider->chat_stream(
+        llm->priv,
+        &llm->params,
+        messages,
+        tools,
+        callback,
+        user_data,
+        response
+    );
+
+    if (err != ARC_OK) {
+        AC_LOG_ERROR("Provider stream chat failed: %d", err);
+        return err;
+    }
+
+    AC_LOG_DEBUG("LLM stream chat completed");
+    return ARC_OK;
+}
+
+/*============================================================================
+ * Parameter Update API (v2)
+ *============================================================================*/
+
+arc_err_t ac_llm_update_params(ac_llm_t* llm, const ac_llm_params_t* params) {
+    if (!llm || !params) {
+        return ARC_ERR_INVALID_ARG;
+    }
+
+    // Update stateful config (mainly for response chaining)
+    if (params->stateful.response_id) {
+        llm->params.stateful.response_id = arena_strdup(llm->arena, params->stateful.response_id);
+    }
+    llm->params.stateful.store = params->stateful.store;
+    llm->params.stateful.include_encrypted = params->stateful.include_encrypted;
+
+    // Update thinking config
+    if (params->thinking.enabled) {
+        llm->params.thinking.enabled = params->thinking.enabled;
+        llm->params.thinking.budget_tokens = params->thinking.budget_tokens;
+    }
+
+    // Update stream flag
+    llm->params.stream = params->stream;
+
+    return ARC_OK;
+}
+
+/*============================================================================
+ * Capabilities API (v2)
+ *============================================================================*/
+
+uint32_t ac_llm_get_capabilities(ac_llm_t* llm) {
+    if (!llm || !llm->provider) {
+        return 0;
+    }
+    return llm->provider->capabilities;
 }

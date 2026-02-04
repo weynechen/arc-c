@@ -25,7 +25,8 @@ extern "C" {
  * and handle LLM-specific request/response processing.
  */
 typedef struct ac_llm_ops {
-    const char* name;  /**< Provider name (for logging) */
+    const char* name;         /**< Provider name (for logging) */
+    uint32_t capabilities;    /**< Capability bitmask (AC_LLM_CAP_*) */
 
     /**
      * @brief Create provider private data
@@ -53,6 +54,30 @@ typedef struct ac_llm_ops {
         const ac_llm_params_t* params,
         const ac_message_t* messages,
         const char* tools,
+        ac_chat_response_t* response
+    );
+
+    /**
+     * @brief Perform streaming chat completion (optional, v2)
+     *
+     * If NULL, streaming is not supported by this provider.
+     *
+     * @param priv Provider private data (returned by create)
+     * @param params LLM parameters
+     * @param messages Message history (linked list)
+     * @param tools JSON array of tool definitions (NULL if no tools)
+     * @param callback Streaming callback
+     * @param user_data User context for callback
+     * @param response Optional: accumulated response output
+     * @return ARC_OK on success
+     */
+    arc_err_t (*chat_stream)(
+        void* priv,
+        const ac_llm_params_t* params,
+        const ac_message_t* messages,
+        const char* tools,
+        ac_stream_callback_t callback,
+        void* user_data,
         ac_chat_response_t* response
     );
 
