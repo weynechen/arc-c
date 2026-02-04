@@ -539,13 +539,23 @@ cJSON* ac_content_block_to_json(const ac_content_block_t* block) {
             break;
 
         case AC_BLOCK_THINKING:
+            /*
+             * Anthropic API requires thinking blocks to have a signature.
+             * If no signature is present (e.g., from compatible endpoints like
+             * Alibaba Cloud Bailian), skip the thinking block entirely.
+             * The thinking content is shown during streaming but not persisted
+             * in history for non-Anthropic endpoints.
+             */
+            if (!block->signature) {
+                /* Skip thinking block without signature */
+                cJSON_Delete(obj);
+                return NULL;
+            }
             cJSON_AddStringToObject(obj, "type", "thinking");
             if (block->text) {
                 cJSON_AddStringToObject(obj, "thinking", block->text);
             }
-            if (block->signature) {
-                cJSON_AddStringToObject(obj, "signature", block->signature);
-            }
+            cJSON_AddStringToObject(obj, "signature", block->signature);
             break;
 
         case AC_BLOCK_REDACTED_THINKING:

@@ -163,6 +163,26 @@
     #endif
 #endif
 
+#ifndef ARC_STRNDUP
+    #include <string.h>
+    #if defined(_WIN32)
+        /* Windows does not have strndup, implement inline */
+        static inline char* arc_strndup_impl(const char* s, size_t n) {
+            size_t len = 0;
+            while (len < n && s[len]) len++;
+            char* result = (char*)malloc(len + 1);
+            if (result) {
+                memcpy(result, s, len);
+                result[len] = '\0';
+            }
+            return result;
+        }
+        #define ARC_STRNDUP(s, n) arc_strndup_impl(s, n)
+    #else
+        #define ARC_STRNDUP(s, n) strndup(s, n)
+    #endif
+#endif
+
 #if defined(_WIN32)
     #define strcasecmp _stricmp
     #define strncasecmp _strnicmp

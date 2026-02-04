@@ -439,9 +439,11 @@ ac_llm_chat_stream(llm, messages, NULL, on_stream, NULL, &final_resp);
 | P0 | 定义新数据结构 (`ac_content_block_t` 等) | ✅ 已完成 |
 | P0 | 更新 `ac_llm_params_t` | ✅ 已完成 |
 | P0 | 实现 Anthropic Provider 思考支持 | ✅ 已完成 |
-| P1 | 实现流式事件结构 | ✅ 已完成（定义） |
-| P1 | 实现 SSE 解析器 | 待实现 |
-| P1 | 实现流式回调机制 | ✅ 已完成（接口） |
+| P1 | 实现流式事件结构 | ✅ 已完成 |
+| P1 | 实现 SSE 解析器 | ✅ 已完成 |
+| P1 | 实现流式回调机制 | ✅ 已完成 |
+| P1 | Anthropic Provider 流式支持 | ✅ 已完成 |
+| P1 | chat_stream.c 示例 | ✅ 已完成 |
 | P2 | OpenAI Provider 流式支持 | 待实现 |
 | P2 | OpenAI Responses Provider | 待实现 |
 | P3 | DeepSeek `<think>` 标签解析 | 待实现 |
